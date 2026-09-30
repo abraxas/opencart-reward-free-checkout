@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="header.png" alt="Abraxas Labs — opencart-reward-free-checkout" width="100%">
+  <img src="header.png" alt="Abraxas Labs - opencart-reward-free-checkout" width="100%">
 </p>
 
 <p align="center">
@@ -14,164 +14,67 @@
 
 # opencart-reward-free-checkout
 
-**OpenCart** `4.1.0.4` — OpenCart
+**OpenCart** `4.1.0.4` - OpenCart Ltd
 
-Unpublished OpenCart source finding: reward.save does not unset payment_method (coupon does). Free Checkout selected while points zero the cart, then points cleared; confirm writes a full-price order; free_checkout.confirm does not recheck total. Distinct from coupon race CVE-2025-15116.
+[CVE-2025-15116](https://www.cve.org/CVERecord?id=CVE-2025-15116) was a coupon race through 4.1.0.3. On 4.1.0.4, [`coupon.save`](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/controller/checkout/coupon.php) unsets `payment_method` when the coupon changes. [`reward.save`](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/controller/checkout/reward.php) does not. Apply enough points that `getTotals` is `<= 0.00`, pick Free Checkout, then clear the points. Confirm rewrites the pending row to catalog price. `free_checkout.confirm` only checks the session payment code.
+
+**A logged-in customer with reward points can ship a catalog SKU as Free Checkout and keep the points.**
 
 | | |
 |---|---|
-| ID | Unpublished OpenCart source finding #1 (no CVE yet) |
-| CWE | [CWE-840, CWE-863](https://cwe.mitre.org/data/definitions/863.html) |
+| ID | no CVE yet |
+| CWE | [CWE-840](https://cwe.mitre.org/data/definitions/840.html), [CWE-863](https://cwe.mitre.org/data/definitions/863.html) |
 | CVSS | **High: 6.5** `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N` |
 | Product | [OpenCart](https://github.com/opencart/opencart) |
-| Affected | all versions **through 4.1.0.4** (inclusive) |
-| Patched | vendor patch — see references |
-| Auth | authenticated (see source map) |
+| Affected | through **4.1.0.4** reward + Free Checkout |
+| Auth | authenticated customer (guest cart is not this bug) |
 | License | [GNU Affero GPL v3.0](LICENSE) |
-| Lab | `127.0.0.1` only · vendor/client disclosure pack, not a scanner |
+| Lab | `127.0.0.1` only |
 
----
+## What an attacker can do
 
-## Advisory (from the source map)
+Log in, put a points-covered SKU in the cart, apply enough reward that Free Checkout lists, save that method, then `reward.save` with `0`. Second confirm writes catalog total. `free_checkout.confirm` promotes the order to paid. Points never debit.
 
-reward.php 90-94 no unset payment_method. coupon.php 67-68 unsets. free_checkout.php confirm 47-55 session code only. confirm.php 279-283 editOrder while status 0.
+They do not get a shell. Guest checkout is not this bug: reward needs a customer. Free Checkout only *lists* at `total <= 0`. The bug is that clearing points does not unlist it, and confirm does not look at the total again.
 
----
+## How I found it
 
-## Entry
+I read `reward.save`, then `coupon.save`, then `getMethods` (`total <= 0.00`), then `editOrder` while status is 0, then `free_checkout.confirm`. On 4.1.0.4, `reward=0` drops `session.reward`. It does not touch `payment_method`. Coupon after the 15116 hardening does.
 
-- **Method:** `POST`
-- **Path:** `/index.php?route=extension/opencart/checkout/reward.save`
-- **Router:** reward.save unsets session.reward only. coupon.save also unsets payment_method. free_checkout.confirm checks session payment code, not order total.
-- **Notes:** Authenticated unpublished OpenCart #1 CWE-840 4.1.0.4. Customer with points. Distinct from coupon race CVE-2025-15116. Not a reverse shell. Disclose forum PM, not a public GitHub issue.
+The first client that looks at this will apply 100 points, pick Free Checkout, confirm once, and get an honest zero-total order. That is the feature, not the bug.
 
-### Call chain
+Wrong turns already recorded: `coupon.save` instead of `reward.save` (that path unsets the method); guest checkout; product with `points=0` (Free Checkout never lists); leaving `reward` in session through `free_checkout.confirm` (honest free order, points should debit); looking at `order_status_id=0` only (pending is not paid). The oracle is **status 1, total 100.00, payment free_checkout, debit 0**.
 
-- `POST account/login.login`
-- `POST checkout/cart.add product_id=36`
-- `POST extension/opencart/checkout/reward.save reward=100`
-- `GET checkout/payment_method.getMethods (free_checkout listed)`
-- `POST checkout/payment_method.save free_checkout.free_checkout`
-- `GET checkout/confirm.confirm (addOrder total~0 status 0)`
-- `POST extension/opencart/checkout/reward.save reward=0`
-- `GET checkout/confirm.confirm (editOrder full total)`
-- `POST extension/opencart/payment/free_checkout.confirm`
+Lab: customer login. Cart add 36 (iPod Nano, `points=100`). `reward.save` 100. Payment methods list Free Checkout. Save it. Confirm writes order 3 at 0. `reward.save` 0. Confirm rewrites order 4 at 100.00. `free_checkout.confirm`. Seed drops tax and shipping so reward can zero `getTotals` exactly. That is not the bug. A catalog SKU whose points cover the line is the realistic case. Customer still has the 1000.
 
-### Lab preconditions
-
-- OpenCart 4.1.0.4
-- total_reward_status=1 and payment_free_checkout_status=1 (defaults)
-- Logged-in customer with oc_customer_reward &gt;= product.points
-- Product with oc_product.points &gt; 0 (demo 36 iPod Nano)
-
-### Witness
-
-oc_order.total at catalog price, payment_method free_checkout, order_status_id != 0, no negative oc_customer_reward for that order_id
-
-### Not success
-
-- eval/base64/system payload
-- reverse shell
-- coupon.save path (CVE-2025-15116 leftover hardening)
-- order stays total 0 (honest free checkout)
-
----
-
-## Patch / remediation
-
-**Do this first:** Apply the vendor patch for **OpenCart**. See references.
-
-**Verify after upgrade**
-
-- Re-run `opencart-reward-free-checkout-Abraxas-Labs.py` against the patched build: the mapped witness must **not** appear.
-- Confirm the vendor advisory / changeset in the deployed tree (see references).
-- A WAF signature is delay, not a patch.
-
-**If you cannot update immediately**
-
-- Disable or isolate the affected component.
-- Hunt for the witness condition on production (new privileged users, unexpected files, injected rows — whatever this CVE's map names).
-
----
-
-## Reproduction (authorized lab)
-
-Target **only** `http://127.0.0.1:18108` (or the loopback you bound). Do not point this script at the internet.
-
-```bash
-python3 opencart-reward-free-checkout-Abraxas-Labs.py
-```
-
-Success is the **witness** above in the response body. Generic 200 HTML is not it.
-
----
-
-## Lab images
-
-Loopback stack used to reproduce. Official images unless a `Dockerfile` in this folder builds from source.
-
-- [`lab/docker-compose.yml`](lab/docker-compose.yml)
-- [`lab/Dockerfile`](lab/Dockerfile)
-- [`lab/run.sh`](lab/run.sh)
-- [`lab/setup-opencart.sh`](lab/setup-opencart.sh)
-
-Place OpenCart **4.1.0.4** `upload/` at `lab/www` (do not commit that tree):
-
-https://github.com/opencart/opencart
-
-Tag `4.1.0.4`. Then:
+## Lab
 
 ```bash
 cd lab
-docker compose up --force-recreate
 ./run.sh
 ```
 
-Publish nothing except `127.0.0.1`.
+Target **only** `http://127.0.0.1:18108`. Place OpenCart 4.1.0.4 `upload/` at `lab/www` first. That tree is not in this repo.
 
----
+```text
+SUCCESS OpenCart reward + Free Checkout underpay
+IOC order-after-reward 3 total=0.0000 status=0 free_checkout.free_checkout
+IOC order-after-clear 4 total=100.0000 status=0 free_checkout.free_checkout
+IOC free_checkout.confirm redirect checkout/success
+IOC order-final 4 total=100.0000 status=1 debit=0 balance=1000
+```
+
+## The fix
+
+`unset` `payment_method` in `reward.save` the way `coupon.save` already does, and make `free_checkout.confirm` refuse `total > 0`.
 
 ## References
 
-- [github.com/opencart/opencart](https://github.com/opencart/opencart) tag 4.1.0.4
-- Contrast (already disclosed coupon race): [CVE-2025-15116](https://nvd.nist.gov/vuln/detail/CVE-2025-15116) — `coupon.save` unsets `payment_method`; `reward.save` does not
-- Vendor intake: OpenCart forum PM to a moderator ([README](https://github.com/opencart/opencart/blob/master/README.md): do **not** post security flaws in a public location). No public GitHub issue on opencart/opencart.
-
-- Abraxas Labs: [abraxaslabs.tech](https://abraxaslabs.tech) · [github.com/abraxas](https://github.com/abraxas) · [@abraxas_null](https://x.com/abraxas_null)
-
----
-
-## Records (structured)
-
-```
-# OpenCart unpublished #1 — reward + Free Checkout underpay
-
-CWE: CWE-840, CWE-863
-Severity: High (HTTP lab SUCCESS, 95%)
-
-## Description
-
-`reward.save` does not unset `payment_method` (coupon does). Apply points to list Free Checkout, then clear points; confirm writes a full-price order; `free_checkout.confirm` does not recheck total.
-
-## Product
-
-OpenCart 4.1.0.4. Lab oracle: order 4 `total=100.00`, `order_status_id=1`, Free Checkout, customer points still 1000. Distinct from coupon race CVE-2025-15116.
-```
-
----
+- [github.com/opencart/opencart](https://github.com/opencart/opencart) tag [4.1.0.4](https://github.com/opencart/opencart/releases/tag/4.1.0.4)
+- [`reward.php`](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/controller/checkout/reward.php) · [`coupon.php`](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/controller/checkout/coupon.php) · [`free_checkout.php` controller](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/controller/payment/free_checkout.php) · [`free_checkout.php` model](https://github.com/opencart/opencart/blob/4.1.0.4/upload/extension/opencart/catalog/model/payment/free_checkout.php) · [`confirm.php`](https://github.com/opencart/opencart/blob/4.1.0.4/upload/catalog/controller/checkout/confirm.php)
+- Contrast: [CVE-2025-15116](https://www.cve.org/CVERecord?id=CVE-2025-15116)
+- [CWE-840](https://cwe.mitre.org/data/definitions/840.html) · [CWE-863](https://cwe.mitre.org/data/definitions/863.html)
 
 ## License
 
-This disclosure pack is licensed under the **GNU Affero General Public License v3.0**. See [LICENSE](LICENSE).
-
----
-
-## Disclaimer
-
-This pack is for **the vendor, the site owner, and licensed labs**. The script talks to `127.0.0.1`. Using it against systems you do not own is not authorized by Abraxas Labs. No warranty.
-
-<p align="center">
-  <a href="https://abraxaslabs.tech">abraxaslabs.tech</a> ·
-  <a href="https://github.com/abraxas">github.com/abraxas</a> ·
-  <a href="https://x.com/abraxas_null">@abraxas_null</a>
-</p>
+GNU Affero GPL v3.0. See [LICENSE](LICENSE). Loopback lab only. No warranty.
