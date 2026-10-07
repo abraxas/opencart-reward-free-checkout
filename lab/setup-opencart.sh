@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP=/var/www/html
-if [ -f "$APP/config.php" ] && grep -q DIR_OPENCART "$APP/config.php"; then
+
+APP="/var/www/html"
+
+if [[ -f "${APP}/config.php" ]] && grep -q DIR_OPENCART "${APP}/config.php"; then
   echo "IOC opencart-already-installed"
-  chown -R www-data:www-data "$APP/system/storage" "$APP/image" || true
+  chown -R www-data:www-data "${APP}/system/storage" "${APP}/image" || true
   exit 0
 fi
+
 echo "IOC opencart-cli-install"
-cp -n "$APP/config-dist.php" "$APP/config.php"
-cp -n "$APP/admin/config-dist.php" "$APP/admin/config.php"
-php "$APP/install/cli_install.php" install \
+cp -n "${APP}/config-dist.php" "${APP}/config.php"
+cp -n "${APP}/admin/config-dist.php" "${APP}/admin/config.php"
+php "${APP}/install/cli_install.php" install \
   --username admin \
   --password LabPass123! \
   --email lab@localhost.invalid \
@@ -34,5 +37,10 @@ $cid=(int)$m->insert_id;
 $m->query("INSERT INTO oc_customer_reward (customer_id,order_id,description,points,date_added) VALUES ($cid,0,\"lab seed\",1000,NOW())");
 echo "IOC customer_id=$cid points=1000 product_36_points=100\n";
 '
-chown -R www-data:www-data "$APP/system/storage" "$APP/image" "$APP/config.php" "$APP/admin/config.php" || true
+chown -R www-data:www-data \
+  "${APP}/system/storage" \
+  "${APP}/image" \
+  "${APP}/config.php" \
+  "${APP}/admin/config.php" \
+  || true
 echo "IOC opencart-setup-done"
