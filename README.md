@@ -13,6 +13,10 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/abraxas/opencart-reward-free-checkout">opencart-reward-free-checkout</a>
 </p>
+<p align="center">
+  Write-up: <a href="https://abraxaslabs.tech/research/opencart-reward-free-checkout"><strong>https://abraxaslabs.tech/research/opencart-reward-free-checkout</strong></a>
+</p>
+
 
 # opencart-reward-free-checkout
 
